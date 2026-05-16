@@ -10,6 +10,7 @@ class CryptoDataLoader:
         self.feat_tensor = None
         self.raw_data_cache = None
         self.target_ret = None
+        self.addresses = []
         
     def load_data(self, limit_tokens=500):
         print("Loading data from SQL...")
@@ -17,9 +18,9 @@ class CryptoDataLoader:
         SELECT address FROM tokens 
         LIMIT {limit_tokens} 
         """
-        addrs = pd.read_sql(top_query, self.engine)['address'].tolist()
-        if not addrs: raise ValueError("No tokens found.")
-        addr_str = "'" + "','".join(addrs) + "'"
+        self.addresses = pd.read_sql(top_query, self.engine)['address'].tolist()
+        if not self.addresses: raise ValueError("No tokens found.")
+        addr_str = "'" + "','".join(self.addresses) + "'"
         data_query = f"""
         SELECT time, address, open, high, low, close, volume, liquidity, fdv
         FROM ohlcv
@@ -29,6 +30,7 @@ class CryptoDataLoader:
         df = pd.read_sql(data_query, self.engine)
         def to_tensor(col):
             pivot = df.pivot(index='time', columns='address', values=col)
+            pivot = pivot.reindex(columns=self.addresses)
             pivot = pivot.fillna(method='ffill').fillna(0.0)
             return torch.tensor(pivot.values.T, dtype=torch.float32, device=ModelConfig.DEVICE)
         self.raw_data_cache = {
