@@ -51,7 +51,12 @@ class DataManager:
         async with aiohttp.ClientSession(headers=self.birdeye.headers) as session:
             tasks = []
             for t in selected_tokens:
-                tasks.append(self.birdeye.get_token_history(session, t['address']))
+                tasks.append(self.birdeye.get_token_history(
+                    session,
+                    t['address'],
+                    liquidity=t.get('liquidity'),
+                    fdv=t.get('fdv'),
+                ))
             
             batch_size = 20
             total_candles = 0
