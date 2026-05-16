@@ -16,6 +16,8 @@ class Config:
     MIN_FDV = 10000000.0            
     MAX_FDV = float('inf') 
     BIRDEYE_API_KEY = os.getenv("BIRDEYE_API_KEY", "")
+    BIRDEYE_BASE_URL = os.getenv("BIRDEYE_BASE_URL", "https://public-api.birdeye.so")
+    BASE_URL = BIRDEYE_BASE_URL
     BIRDEYE_IS_PAID = True
     USE_DEXSCREENER = False
     CONCURRENCY = 20

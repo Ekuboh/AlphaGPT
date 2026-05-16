@@ -6,5 +6,5 @@ class DataProvider(ABC):
         pass
 
     @abstractmethod
-    async def get_token_history(self, session, address: str, days: int):
+    async def get_token_history(self, session, address: str, days: int, **kwargs):
         pass
