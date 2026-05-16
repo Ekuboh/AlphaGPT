@@ -1,9 +1,9 @@
 import asyncio
 import torch
 import json
+import os
 import time
 from loguru import logger
-import pandas as pd
 
 from data_pipeline.data_manager import DataManager
 from model_core.vm import StackVM
@@ -25,6 +25,7 @@ class StrategyRunner:
         self.loader = CryptoDataLoader()
         self.token_map = {} # {address: tensor_index} 用于快速查找特征
         self.last_scan_time = 0
+        self.stop_signal_path = os.getenv("STOP_SIGNAL_PATH", "STOP_SIGNAL")
         
         try:
             with open("best_meme_strategy.json", "r") as f:
@@ -46,6 +47,9 @@ class StrategyRunner:
         
         while True:
             try:
+                if self._handle_stop_signal():
+                    break
+
                 loop_start = time.time()
                 
                 if time.time() - self.last_scan_time > 900: # 15 min
@@ -56,7 +60,13 @@ class StrategyRunner:
                 self.loader.load_data(limit_tokens=300)
                 await self._build_token_mapping()
 
+                if self._handle_stop_signal():
+                    break
+
                 await self.monitor_positions()
+
+                if self._handle_stop_signal():
+                    break
                 
                 if self.portfolio.get_open_count() < StrategyConfig.MAX_OPEN_POSITIONS:
                     await self.scan_for_entries()
@@ -72,18 +82,29 @@ class StrategyRunner:
                 logger.exception(f"Global Loop Error: {e}")
                 await asyncio.sleep(30)
 
+    def _stop_requested(self):
+        if not os.path.exists(self.stop_signal_path):
+            return False
+        try:
+            with open(self.stop_signal_path, "r") as f:
+                signal = f.read().strip().upper()
+        except OSError:
+            return True
+        return signal in {"", "STOP", "STOPPED"}
+
+    def _handle_stop_signal(self):
+        if not self._stop_requested():
+            return False
+        logger.warning(f"STOP signal received from {self.stop_signal_path}. Trading loop will stop.")
+        try:
+            with open(self.stop_signal_path, "w") as f:
+                f.write("STOPPED")
+        except OSError as e:
+            logger.warning(f"Failed to mark stop signal as consumed: {e}")
+        return True
+
     async def _build_token_mapping(self):
-        query = f"""
-        SELECT address, count(*) as cnt 
-        FROM ohlcv 
-        GROUP BY address 
-        ORDER BY cnt DESC 
-        LIMIT 300
-        """
-        df = pd.read_sql(query, self.loader.engine)
-        addresses = df['address'].tolist()
-        
-        self.token_map = {addr: idx for idx, addr in enumerate(addresses)}
+        self.token_map = {addr: idx for idx, addr in enumerate(self.loader.addresses)}
         logger.info(f"Mapped {len(self.token_map)} tokens for inference.")
 
     async def monitor_positions(self):
@@ -128,6 +149,9 @@ class StrategyRunner:
                     await self._execute_sell(token_addr, 1.0, "AI_Signal")
 
     async def scan_for_entries(self):
+        if self._handle_stop_signal():
+            return
+
         raw_signals = self.vm.execute(self.formula, self.loader.feat_tensor)
         
         if raw_signals is None: return
@@ -162,6 +186,8 @@ class StrategyRunner:
             
             is_safe = await self.risk.check_safety(token_addr, liq_usd)
             if is_safe:
+                if self._handle_stop_signal():
+                    return
                 await self._execute_buy(token_addr, score)
                 
                 # 检查仓位上限
@@ -169,6 +195,10 @@ class StrategyRunner:
                     break
 
     async def _execute_buy(self, token_addr, score):
+        if self._handle_stop_signal():
+            logger.warning("Buy skipped because STOP signal is active.")
+            return
+
         balance = await self.trader.rpc.get_balance()
         amount_sol = self.risk.calculate_position_size(balance)
         
@@ -212,6 +242,10 @@ class StrategyRunner:
             logger.success(f"+ | Position Added: {token_amount_ui:.2f} units @ {entry_price_sol:.6f} SOL")
 
     async def _execute_sell(self, token_addr, ratio, reason):
+        if self._handle_stop_signal():
+            logger.warning("Sell skipped because STOP signal is active.")
+            return
+
         pos = self.portfolio.positions.get(token_addr)
         if not pos: return
 
@@ -282,4 +316,6 @@ if __name__ == "__main__":
         loop.run_until_complete(runner.initialize())
         loop.run_until_complete(runner.run_loop())
     except KeyboardInterrupt:
+        pass
+    finally:
         loop.run_until_complete(runner.shutdown())
