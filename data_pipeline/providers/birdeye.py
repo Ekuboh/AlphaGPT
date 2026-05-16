@@ -7,12 +7,21 @@ from .base import DataProvider
 
 class BirdeyeProvider(DataProvider):
     def __init__(self):
-        self.base_url = "https://public-api.birdeye.so"
+        self.base_url = Config.BIRDEYE_BASE_URL
         self.headers = {
             "X-API-KEY": Config.BIRDEYE_API_KEY,
             "accept": "application/json"
         }
         self.semaphore = asyncio.Semaphore(Config.CONCURRENCY)
+
+    @staticmethod
+    def _as_float(value, default=0.0):
+        try:
+            if value is None:
+                return default
+            return float(value)
+        except (TypeError, ValueError):
+            return default
         
     async def get_trending_tokens(self, limit=100):
         url = f"{self.base_url}/defi/token_trending"
@@ -37,8 +46,8 @@ class BirdeyeProvider(DataProvider):
                                 'symbol': t.get('symbol', 'UNKNOWN'),
                                 'name': t.get('name', 'UNKNOWN'),
                                 'decimals': t.get('decimals', 6),
-                                'liquidity': t.get('liquidity', 0),
-                                'fdv': t.get('fdv', 0)
+                                'liquidity': self._as_float(t.get('liquidity')),
+                                'fdv': self._as_float(t.get('fdv'))
                             })
                         return results
                     else:
@@ -48,9 +57,11 @@ class BirdeyeProvider(DataProvider):
                 logger.error(f"Birdeye Trending Exception: {e}")
                 return []
 
-    async def get_token_history(self, session, address, days=Config.HISTORY_DAYS):
+    async def get_token_history(self, session, address, days=Config.HISTORY_DAYS, liquidity=None, fdv=None):
         time_to = int(datetime.now().timestamp())
         time_from = int((datetime.now() - timedelta(days=days)).timestamp())
+        snapshot_liquidity = self._as_float(liquidity)
+        snapshot_fdv = self._as_float(fdv)
         
         url = f"{self.base_url}/defi/ohlcv"
         params = {
@@ -70,6 +81,8 @@ class BirdeyeProvider(DataProvider):
                         
                         formatted = []
                         for item in items:
+                            candle_liquidity = self._as_float(item.get('liquidity'), snapshot_liquidity)
+                            candle_fdv = self._as_float(item.get('fdv'), snapshot_fdv)
                             formatted.append((
                                 datetime.fromtimestamp(item['unixTime']), # time
                                 address,                                  # address
@@ -78,15 +91,15 @@ class BirdeyeProvider(DataProvider):
                                 float(item['l']),                         # low
                                 float(item['c']),                         # close
                                 float(item['v']),                         # volume
-                                0.0,                                      # liquidity
-                                0.0,                                      # fdv
+                                candle_liquidity,                         # liquidity
+                                candle_fdv,                               # fdv
                                 'birdeye'                                 # source
                             ))
                         return formatted
                     elif resp.status == 429:
                         logger.warning(f"Birdeye 429 for {address}, retrying...")
                         await asyncio.sleep(2)
-                        return await self.get_token_history(session, address, days)
+                        return await self.get_token_history(session, address, days, liquidity=liquidity, fdv=fdv)
                     else:
                         return []
             except Exception as e:

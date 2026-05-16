@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .config import ModelConfig
-from .ops import OPS_CONFIG
+from .vocab import FORMULA_VOCAB
 
 
 class NewtonSchulzLowRankDecay:
@@ -222,11 +222,11 @@ class AlphaGPT(nn.Module):
     def __init__(self):
         super().__init__()
         self.d_model = 64
-        self.features_list = ['RET', 'VOL', 'V_CHG', 'PV', 'TREND']
-        self.ops_list = [cfg[0] for cfg in OPS_CONFIG]
+        self.features_list = list(FORMULA_VOCAB.feature_names)
+        self.ops_list = list(FORMULA_VOCAB.operator_names)
         
-        self.vocab = self.features_list + self.ops_list
-        self.vocab_size = len(self.vocab)
+        self.vocab = list(FORMULA_VOCAB.token_names)
+        self.vocab_size = FORMULA_VOCAB.size
         
         # Embedding
         self.token_emb = nn.Embedding(self.vocab_size, self.d_model)

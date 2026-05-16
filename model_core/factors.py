@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+from .vocab import FEATURE_NAMES
+
 
 class RMSNormFactor(nn.Module):
     """RMSNorm for factor normalization"""
@@ -154,7 +156,7 @@ class AdvancedFactorEngineer:
 
 
 class FeatureEngineer:
-    INPUT_DIM = 6
+    INPUT_DIM = len(FEATURE_NAMES)
 
     @staticmethod
     def compute_features(raw_dict):

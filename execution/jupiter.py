@@ -1,6 +1,5 @@
 import aiohttp
 import base64
-import json
 from loguru import logger
 from solders.transaction import VersionedTransaction
 from .config import ExecutionConfig
@@ -39,7 +38,7 @@ class JupiterAggregator:
         url = f"{self.base_url}/swap"
         payload = {
             "quoteResponse": quote_response,
-            "userPublicKey": ExecutionConfig.WALLET_ADDRESS,
+            "userPublicKey": ExecutionConfig.get_wallet_address(),
             "wrapAndUnwrapSol": True,
             "computeUnitPriceMicroLamports": "auto",
             "prioritizationFeeLamports": "auto"
@@ -61,7 +60,7 @@ class JupiterAggregator:
         try:
             tx_bytes = base64.b64decode(b64_tx_str)
             txn = VersionedTransaction.from_bytes(tx_bytes)
-            signature = ExecutionConfig.PAYER_KEYPAIR.sign_message(txn.message.to_bytes())
+            signature = ExecutionConfig.get_payer_keypair().sign_message(txn.message.to_bytes())
             txn = VersionedTransaction.populate(txn.message, [signature])
             return txn
         except Exception as e:

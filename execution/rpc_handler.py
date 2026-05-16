@@ -9,7 +9,7 @@ class QuickNodeClient:
 
     async def get_balance(self):
         try:
-            resp = await self.client.get_balance(ExecutionConfig.PAYER_KEYPAIR.pubkey())
+            resp = await self.client.get_balance(ExecutionConfig.get_payer_keypair().pubkey())
             return resp.value / 1e9
         except Exception as e:
             logger.error(f"Failed to get balance: {e}")
