@@ -9,6 +9,7 @@ from .jupiter import JupiterAggregator
 
 class SolanaTrader:
     def __init__(self):
+        self.config = ExecutionConfig
         self.rpc = QuickNodeClient()
         self.jup = JupiterAggregator()
         self.is_running = True
@@ -50,7 +51,7 @@ class SolanaTrader:
         logger.info(f"Executing SELL: {percentage*100}% of {token_address} -> SOL")
         raw_balance = 0
         try:
-            wallet_pubkey = Pubkey.from_string(ExecutionConfig.WALLET_ADDRESS)
+            wallet_pubkey = Pubkey.from_string(ExecutionConfig.get_wallet_address())
             mint_pubkey = Pubkey.from_string(token_address)
             opts = TokenAccountOpts(
                 program_id=self.TOKEN_PROGRAM_ID,
